@@ -20,7 +20,9 @@ def export_dfpynb(filename,d):
         nlist = ""
         mlist = []
         exec_count = hex(cell['execution_count'])[2:]
-        for line in cell['source'].split('\n'):
+        if type(cell['source'] == str):
+            cell['source'] = cell['source'].split('\n')
+        for line in cell['source']:
             if (line[0] == '%'):
                 mlist.append(line + '\n')
                 continue
