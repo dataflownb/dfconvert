@@ -11,10 +11,11 @@ def import_dfpynb(filename,d):
         nlist = ""
         mlist = []
         exec_count = int(binascii.b2a_hex(os.urandom(6)), 16)
-        if type(cell['source'] == str):
-            cell['source'] = cell['source'].split('\n')
-        for line in cell['source']:
-            if (line[0] == '%'):
+        csource = cell['source']
+        if (type(cell['source']) == str):
+            csource = cell['source'].rstrip('\n ').split('\n')
+        for line in csource:
+            if len(line) > 0 and line[0] == '%':
                 mlist.append(line + '\n')
                 continue
             elif (re.search('###Out_[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]###',
