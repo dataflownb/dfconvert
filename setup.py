@@ -7,7 +7,7 @@ HERE = os.path.abspath(os.path.dirname(__file__))
 
 # Eval the version tuple and string from the source
 VERSION_NS = {}
-with open(os.path.join(HERE, 'dashboards_bundlers/_version.py')) as f:
+with open(os.path.join(HERE, 'dfipy_convert/_version.py')) as f:
     exec(f.read(), {}, VERSION_NS)
 
 setup_args = dict(
