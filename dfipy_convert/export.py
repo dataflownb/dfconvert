@@ -29,8 +29,11 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True):
             magics_lines = {}
             code_lines = {}
             for idx, line in enumerate(csource):
+                # this was to prevent index errors
+                if not (len(line)):
+                    continue
                 # keep magics lines out of rb
-                if line.startswith('%'):
+                if line.startswith('%') or line.startswith('!'):
                     magics_lines[idx] = line + '\n'
                 else:
                     code_lines[idx] = line.rstrip()
