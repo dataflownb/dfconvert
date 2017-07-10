@@ -42,6 +42,11 @@ def import_dfpynb(filename,d):
             mlist.append((nlist[x].dumps()) + '\n')
         cell['source'] = mlist
 
+    # change the kernelspec
+    # FIXME what if this metadata doesn't exist?
+    d["metadata"]["kernelspec"]["display_name"] = "DFPython 3"
+    d["metadata"]["kernelspec"]["name"] = "dfpython3"
+
     if (re.search('_ipy', filename) != None):
         ipy = str.index(filename, '_ipy')
         filename = filename[:ipy] + filename[ipy + len('_ipy'):]
