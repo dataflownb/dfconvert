@@ -13,12 +13,12 @@ with open(os.path.join(HERE, 'dfconvert/_version.py')) as f:
 setup_args = dict(
     name='dfconvert',
     author='Dataflow Notebook Team',
-    author_email='jupyter@googlegroups.com',
+    author_email='cbrown12@umassd.edu',
     description='Tool for converting to and from IPykernel/DFKernel Compliant Notebooks',
     long_description='''
     This package adds *Download as* menu items for translating notebooks created using IPykernel or DFKernel to be
     compliant with the alternative Notebook environment.
-See `the project README <https://github.com/colinjbrown/dfconvert>`_
+See `the project README <https://github.com/dataflownb/dfconvert>`_
 for more information.
 ''',
     url='https://github.com/colinjbrown/dfconvert',
