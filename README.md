@@ -1,4 +1,4 @@
-# dfipy_convert
+# dfconvert
 
 ## Installation Instructions
 
