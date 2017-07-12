@@ -7,26 +7,26 @@ HERE = os.path.abspath(os.path.dirname(__file__))
 
 # Eval the version tuple and string from the source
 VERSION_NS = {}
-with open(os.path.join(HERE, 'dfipy_convert/_version.py')) as f:
+with open(os.path.join(HERE, 'dfconvert/_version.py')) as f:
     exec(f.read(), {}, VERSION_NS)
 
 setup_args = dict(
-    name='dfipy_convert',
+    name='dfconvert',
     author='Dataflow Notebook Team',
     author_email='jupyter@googlegroups.com',
     description='Tool for converting to and from IPykernel/DFKernel Compliant Notebooks',
     long_description='''
     This package adds *Download as* menu items for translating notebooks created using IPykernel or DFKernel to be
     compliant with the alternative Notebook environment.
-See `the project README <https://github.com/colinjbrown/dfipy_convert>`_
+See `the project README <https://github.com/colinjbrown/dfconvert>`_
 for more information.
 ''',
-    url='https://github.com/colinjbrown/dfipy_convert',
+    url='https://github.com/colinjbrown/dfconvert',
     version=VERSION_NS['__version__'],
     license='BSD',
     platforms=['Jupyter Notebook 5.x'],
     packages=[
-        'dfipy_convert',
+        'dfconvert',
     ],
     include_package_data=True,
     install_requires=[
