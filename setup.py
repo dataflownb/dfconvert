@@ -31,7 +31,8 @@ for more information.
     include_package_data=True,
     install_requires=[
         'redbaron>=0.6',
-        'notebook>=5.0'
+        'notebook>=5.4',
+        'astor>=0.7',
     ],
     classifiers=[
         'Intended Audience :: Developers',
