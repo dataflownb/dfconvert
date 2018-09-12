@@ -1,16 +1,30 @@
 from collections import defaultdict
 import json
-import redbaron
 import os
 from dfconvert.topological import topological
+import ast
+import IPython.core
+import re
+import astor
 
 DEFAULT_ID_LENGTH = 6
+
+def transform(line):
+    #Changes Out[aaa] and Out["aaa"] to Out_aaa
+    return re.sub('Out\[[\"|\']?([0-9A-Fa-f]{'+str(DEFAULT_ID_LENGTH)+'})[\"|\']?\]', r'Out_\1',line)
+
+out_transformer = IPython.core.inputtransformer.StatelessInputTransformer(transform)
+
+transformer = IPython.core.inputsplitter.IPythonInputSplitter(physical_line_transforms=[out_transformer])
+
 
 def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True):
     last_code_id = None
     non_code_map = defaultdict(list)
     code_cells = {}
     deps = defaultdict(list)
+    out_tags = defaultdict(list)
+    refs = {}
 
     if md_above:
         # reverse the cells
@@ -21,58 +35,70 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True):
             # keep non-code cells above or below code cell
             non_code_map[last_code_id].append(cell)
         else:
-            exec_count = hex(cell['execution_count'])[2:].zfill(DEFAULT_ID_LENGTH)
-            last_code_id = exec_count
-            csource = cell['source']
-            if isinstance(csource, str):
-                csource = csource.rstrip().split('\n')
-            magics_lines = {}
-            code_lines = {}
-            for idx, line in enumerate(csource):
-                # this was to prevent index errors
-                if not (len(line)):
-                    continue
-                # keep magics lines out of rb
-                if line.startswith('%') or line.startswith('!'):
-                    magics_lines[idx] = line + '\n'
-                else:
-                    code_lines[idx] = line.rstrip()
-
-            red = redbaron.RedBaron("\n".join([v for (_, v) in sorted(code_lines.items())]))
-            for node in red.find_all("atomtrailers"):
-                if (node[0].type == 'name' and node[0].value == 'Out' and
-                    node[1].type == 'getitem'):
-                    ref_id = node[1].value.value[1:-1]
-                    deps[exec_count].append(ref_id)
-                    if len(node) > 2:
-                        node[0].replace("Out_{}".format(ref_id))
-                        node.remove(node[1])
-                    else:
-                        node.replace("Out_{}".format(ref_id))
-            if len(red.node_list) > 0:
-                red.node_list[-1].replace('Out_{} = {}'.format(exec_count,
-                                                               red.node_list[-1]))
-                red.node_list[-1].insert_after("Out_{}".format(exec_count))
-                code_lines[max(code_lines)+1] = None # value doesn't matter
-
-            # potential extra line from last output expression
-            out_code_lines = dict(zip(sorted(code_lines.keys()),
-                                      [x + '\n' for x in red.dumps().split('\n')]))
-            # put back magic cells
-            lines = [(out_code_lines[i] if i in out_code_lines else magics_lines[i])
-                     for i in range(max([max(out_code_lines, default=-1),
-                                         max(magics_lines, default=-1)])+1)]
-            cell['source'] = ["### Out_{} ###\n".format(exec_count),] + lines
-
-            # clean up extra newline
-            if len(cell['source']) > 0:
-                cell['source'][-1] = cell['source'][-1][:-1]
-
-            code_cells[exec_count] = cell
+            # This condition should never happen but incase it does
+            # we want to ignore cells without any execution count
+            if ('execution_count' in cell):
+                exec_count = hex(cell['execution_count'])[2:].zfill(DEFAULT_ID_LENGTH)
+                last_code_id = exec_count
+                csource = cell['source']
+                if not isinstance(csource, str):
+                    csource = "".join(csource)
+                csource = transformer.transform_cell(csource)
+                cast = ast.parse(csource)
+                if len(cast.body) > 0 and isinstance(cast.body[-1], ast.Expr):
+                    expr_val = cast.body[-1].value
+                    if isinstance(expr_val, ast.Tuple):
+                        tuple_eles = []
+                        named_flag = False
+                        for idx, elt in enumerate(expr_val.elts):
+                            if isinstance(elt, ast.Name):
+                                named_flag = True
+                                tuple_eles.append(ast.Name(elt.id, ast.Store))
+                            else:
+                                tuple_eles.append(ast.Name('Out_' + str(exec_count) + str(idx), ast.Store))
+                        if (named_flag):
+                            nnode = ast.Assign([ast.Tuple(tuple_eles,ast.Store)], expr_val)
+                            ast.fix_missing_locations(nnode)
+                            cast.body[-1] = nnode
+                for node in ast.walk(cast):
+                    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+                        out_ref = re.search('(?<=Out_)([0-9A-Fa-f]{'+str(DEFAULT_ID_LENGTH)+'})', node.id)
+                        if out_ref:
+                            deps[exec_count].append(out_ref.group(0))
+                        else:
+                            deps[exec_count].append(node.id)
+                cell['source'] = astor.to_source(cast).rstrip()
+                if ('outputs' in cell):
+                    for output in cell['outputs']:
+                        if ('metadata' in output and 'output_tag' in output['metadata']):
+                            out_tag = output['metadata']['output_tag']
+                            out_tags[exec_count].append(out_tag)
+                            refs[out_tag] = exec_count
+                code_cells[exec_count] = cell
+            else:
+                continue
 
     cells = []
     cells.extend(non_code_map[None])
-    for cid in reversed(topological(deps)):
+
+    # Remove all namenodes that aren't output tags
+    out_tag_set = sorted({x for v in out_tags.values() for x in v})
+
+    for node in deps:
+        deps[node] = list(set(deps[node]).intersection(out_tag_set).difference(set(out_tags[node])))
+
+    for k in out_tags:
+        for tag in out_tags[k]:
+            deps[tag] = deps[k]
+
+    topo_deps = list(reversed(topological(deps)))
+    while topo_deps:
+        cid = topo_deps.pop()
+        if cid in refs:
+            for tag in out_tags[refs[cid]]:
+                if tag in topo_deps:
+                    topo_deps.remove(tag)
+            cid = refs[cid]
         cells.extend(non_code_map[cid])
         cells.append(code_cells[cid])
 
