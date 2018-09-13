@@ -67,6 +67,14 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True):
                             deps[exec_count].append(out_ref.group(0))
                         else:
                             deps[exec_count].append(node.id)
+                    # Grab magic lines and perform our own parsing
+                    elif isinstance(node, ast.Call) and isinstance(node.func,
+                                                                   ast.Attribute) and node.func.attr == 'run_line_magic' and node.args:
+                        args = node.args
+                        if args[0].s == 'split_out':
+                            for subnode in ast.walk(ast.parse(args[1].s)):
+                                if isinstance(subnode, ast.Name):
+                                    deps[exec_count].append(subnode.id)
                 cell['source'] = astor.to_source(cast).rstrip()
                 if ('outputs' in cell):
                     for output in cell['outputs']:
