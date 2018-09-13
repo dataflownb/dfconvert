@@ -83,9 +83,12 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True):
 
     # Remove all namenodes that aren't output tags
     out_tag_set = sorted({x for v in out_tags.values() for x in v})
+    valid_keys = out_tag_set + list(deps)
 
     for node in deps:
-        deps[node] = list(set(deps[node]).intersection(out_tag_set).difference(set(out_tags[node])))
+        #Ensure that keys are valid NameNode refs and then
+        #Ensure that we don't have circular dependencies where a cell depends on itself
+        deps[node] = list(set(deps[node]).intersection(valid_keys).difference(set(out_tags[node])))
 
     for k in out_tags:
         for tag in out_tags[k]:
