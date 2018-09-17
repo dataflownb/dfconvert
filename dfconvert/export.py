@@ -98,18 +98,15 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True):
         #Ensure that we don't have circular dependencies where a cell depends on itself
         deps[node] = list(set(deps[node]).intersection(valid_keys).difference(set(out_tags[node])))
 
-    for k in out_tags:
-        for tag in out_tags[k]:
-            deps[tag] = deps[k]
+    #Convert all tag references into dependency references
+    for tag in deps:
+        for idx, dep in enumerate(deps[tag]):
+            if dep in refs:
+                deps[tag][idx] = refs[dep]
 
-    topo_deps = list(reversed(topological(deps)))
+    topo_deps = list(topological(deps))
     while topo_deps:
         cid = topo_deps.pop()
-        if cid in refs:
-            for tag in out_tags[refs[cid]]:
-                if tag in topo_deps:
-                    topo_deps.remove(tag)
-            cid = refs[cid]
         cells.extend(non_code_map[cid])
         cells.append(code_cells[cid])
 
