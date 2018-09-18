@@ -1,46 +1,57 @@
-import json
-import redbaron
+import ast
+import astor
+import IPython.core
+from dfconvert.constants import DEFAULT_ID_LENGTH,DF_CELL_PREFIX,IPY_CELL_PREFIX
 import re
 import os, binascii
+import json
+
+def transform(line):
+    #Changes Out[aaa] and Out["aaa"] to Out_aaa
+    return re.sub('Out_([0-9A-Fa-f]{'+str(DEFAULT_ID_LENGTH)+'})', r'Out[\1]',line)
+
+def remove_comment(line):
+    #Removes comments from export.py
+    return line.replace(DF_CELL_PREFIX,'')
+
+def transform_last_node(nnode):
+    for node in nnode.targets:
+        for name in ast.walk(node):
+            if isinstance(name,ast.Name):
+                reobj = re.search('(Out_)?([0-9A-Fa-f]{6})',name.id)
+                if(reobj):
+                    #Only need to reassign Assign to expression if it contains an O
+                    return ast.Expr(nnode.value)
+    return nnode
+
+
+out_transformer = IPython.core.inputtransformer.StatelessInputTransformer(transform)
+comment_remover = IPython.core.inputtransformer.StatelessInputTransformer(remove_comment)
+
+transformer = IPython.core.inputsplitter.IPythonInputSplitter(physical_line_transforms=[out_transformer,comment_remover])
+remove_magics = IPython.core.inputsplitter.IPythonInputSplitter()
 
 def import_dfpynb(filename,d):
     fullpath = os.getcwd()
     for cell in d['cells']:
         if (cell['cell_type'] != "code"):
             continue
-        nlist = ""
-        mlist = []
-        exec_count = int(binascii.b2a_hex(os.urandom(6)), 16)
+        if 'metadata' in cell and 'dfkernel_old_id' in cell['metadata']:
+            exec_count = cell['metadata']['dfkernel_old_id']
+            del cell['metadata']['dfkernel_old_id']
+        else:
+            exec_count = int(binascii.b2a_hex(os.urandom(6)), 16)
         csource = cell['source']
-        if (type(cell['source']) == str):
-            csource = cell['source'].rstrip('\n ').split('\n')
-        for line in csource:
-            if len(line) > 0 and (line[0] == '%' or line[0] == '!'):
-                mlist.append(line + '\n')
-                continue
-            elif (re.search('###Out_[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]###',
-                            line) != None):
-                exec_count = int(
-                    re.search('(?<=###Out_)[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f](?<!###)',
-                              line).group(0), 16)
-                continue
-            nlist = nlist + line.rstrip() + '\n'
-        nlist = redbaron.RedBaron(nlist)
-        for node in nlist.find_all("name", value=lambda value: re.search('(?<=Out_)' + hex(exec_count)[2:], value)):
-            try:
-                val = nlist.index(node.parent)
-            except ValueError:
-                pass
-            del nlist[val]
-        for node in nlist.find_all("name", value=lambda value: re.search(
-                '(?<=Out_)[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]', value)):
-            node.value = "Out['" + str(node.value)[len("Out_"):] + "']"
+        if not isinstance(csource, str):
+            csource = "".join(csource)
+        csource = remove_magics.transform_cell(csource)
+        cast = ast.parse(csource)
+        if cast.body and isinstance(cast.body[-1], ast.Assign):
+            cast.body[-1] = transform_last_node(cast.body[-1])
+            csource = astor.to_source(cast)
+        csource = IPY_CELL_PREFIX + transformer.transform_cell(csource).rstrip()
         cell['execution_count'] = exec_count
-        if (len(cell['outputs']) > 0):
-            cell['outputs'][0]['execution_count'] = exec_count
-        for x in range(len(nlist)):
-            mlist.append((nlist[x].dumps()) + '\n')
-        cell['source'] = mlist
+        cell['source'] = csource
 
     # change the kernelspec
     # FIXME what if this metadata doesn't exist?
