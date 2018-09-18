@@ -21,7 +21,7 @@ setup_args = dict(
 See `the project README <https://github.com/dataflownb/dfconvert>`_
 for more information.
 ''',
-    url='https://github.com/colinjbrown/dfconvert',
+    url='https://github.com/dataflownb/dfconvert',
     version=VERSION_NS['__version__'],
     license='BSD',
     platforms=['Jupyter Notebook 5.x'],
@@ -30,7 +30,6 @@ for more information.
     ],
     include_package_data=True,
     install_requires=[
-        'redbaron>=0.6',
         'notebook>=5.4',
         'astor>=0.7',
     ],
