@@ -13,9 +13,15 @@ def transform(line):
     #Changes Out[aaa] and Out["aaa"] to Out_aaa
     return re.sub('Out\[[\"|\']?([0-9A-Fa-f]{'+str(DEFAULT_ID_LENGTH)+'})[\"|\']?\]', r'Out_\1',line)
 
-out_transformer = IPython.core.inputtransformer.StatelessInputTransformer(transform)
+def remove_comment(line):
+    #Removes comments from export.py
+    return line.replace(IPY_CELL_PREFIX,'')
 
-transformer = IPython.core.inputsplitter.IPythonInputSplitter(physical_line_transforms=[out_transformer])
+
+out_transformer = IPython.core.inputtransformer.StatelessInputTransformer(transform)
+comment_remover = IPython.core.inputtransformer.StatelessInputTransformer(remove_comment)
+
+transformer = IPython.core.inputsplitter.IPythonInputSplitter(physical_line_transforms=[out_transformer,comment_remover])
 
 
 def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True):
@@ -39,6 +45,8 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True):
             # we want to ignore cells without any execution count
             if ('execution_count' in cell):
                 exec_count = hex(cell['execution_count'])[2:].zfill(DEFAULT_ID_LENGTH)
+                if 'metadata' in cell:
+                    cell.metadata.dfkernel_old_id = cell['execution_count']
                 last_code_id = exec_count
                 csource = cell['source']
                 if not isinstance(csource, str):
