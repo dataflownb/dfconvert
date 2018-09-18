@@ -1,13 +1,13 @@
 from collections import defaultdict
 import json
 import os
+from dfconvert.constants import DEFAULT_ID_LENGTH,DF_CELL_PREFIX,IPY_CELL_PREFIX
 from dfconvert.topological import topological
 import ast
 import IPython.core
 import re
 import astor
 
-DEFAULT_ID_LENGTH = 6
 
 def transform(line):
     #Changes Out[aaa] and Out["aaa"] to Out_aaa
@@ -75,7 +75,7 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True):
                             for subnode in ast.walk(ast.parse(args[1].s)):
                                 if isinstance(subnode, ast.Name):
                                     deps[exec_count].append(subnode.id)
-                cell['source'] = astor.to_source(cast).rstrip()
+                cell['source'] = DF_CELL_PREFIX + astor.to_source(cast).rstrip()
                 if ('outputs' in cell):
                     for output in cell['outputs']:
                         if ('metadata' in output and 'output_tag' in output['metadata']):
