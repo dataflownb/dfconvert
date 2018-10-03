@@ -15,7 +15,7 @@ def transform(line):
 
 def remove_comment(line):
     #Removes comments from export.py
-    return line.replace(IPY_CELL_PREFIX,'')
+    return line.replace(IPY_CELL_PREFIX[:-2],'')
 
 
 out_transformer = IPython.core.inputtransformer.StatelessInputTransformer(transform)

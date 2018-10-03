@@ -12,7 +12,7 @@ def transform(line):
 
 def remove_comment(line):
     #Removes comments from export.py
-    return line.replace(DF_CELL_PREFIX,'')
+    return line.replace(DF_CELL_PREFIX[:-2],'')
 
 def transform_last_node(nnode):
     for node in nnode.targets:
