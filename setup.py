@@ -32,6 +32,7 @@ for more information.
     install_requires=[
         'notebook>=5.4',
         'astor>=0.7',
+        'asttokens>1.1'
     ],
     classifiers=[
         'Intended Audience :: Developers',

@@ -4,33 +4,93 @@ import os
 from dfconvert.constants import DEFAULT_ID_LENGTH,DF_CELL_PREFIX,IPY_CELL_PREFIX
 from dfconvert.topological import topological
 import ast
+#Adds tokens to the ast
+import asttokens
 import IPython.core
 import re
 import astor
 
 
-def transform(line):
-    #Changes Out[aaa] and Out["aaa"] to Out_aaa
-    return re.sub('Out\[[\"|\']?([0-9A-Fa-f]{'+str(DEFAULT_ID_LENGTH)+'})[\"|\']?\]', r'Out_\1',line)
+transformers = []
 
 def remove_comment(line):
     #Removes comments from export.py
     return line.replace(IPY_CELL_PREFIX[:-2],'')
 
 
-out_transformer = IPython.core.inputtransformer.StatelessInputTransformer(transform)
 comment_remover = IPython.core.inputtransformer.StatelessInputTransformer(remove_comment)
+transformers.append(comment_remover)
 
-transformer = IPython.core.inputsplitter.IPythonInputSplitter(physical_line_transforms=[out_transformer,comment_remover])
+
+def transform_last_node(csource,cast):
+    if len(cast.tree.body) > 0 and isinstance(cast.tree.body[-1], ast.Expr):
+        expr_val = cast.tree.body[-1].value
+        if isinstance(expr_val, ast.Tuple):
+            tuple_eles = []
+            named_flag = False
+            for idx, elt in enumerate(expr_val.elts):
+                if isinstance(elt, ast.Name):
+                    named_flag = True
+                    tuple_eles.append(ast.Name(elt.id, ast.Store))
+                else:
+                    tuple_eles.append(ast.Name('Out_' + str(exec_count) + str(idx), ast.Store))
+            if (named_flag):
+                nnode = ast.Assign([ast.Tuple(tuple_eles, ast.Store)], expr_val)
+                ast.fix_missing_locations(nnode)
+                start,end = cast.tree.body[-1].last_token.startpos, cast.tree.body[-1].last_token.endpos
+                csource = csource[:start] + astor.to_source(nnode) + csource[end:]
+    return csource
+
+def transform_out_refs(csource,cast):
+    offset = 0
+    #Depth first traversal otherwise offset won't be accurate
+    for node in asttokens.util.walk(cast.tree):
+        if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name) and node.value.id == 'Out':
+            start, end = node.first_token.startpos + offset, node.last_token.endpos + offset
+            new_id = re.sub('Out\[[\"|\']?([0-9A-Fa-f]{' + str(DEFAULT_ID_LENGTH) + '})[\"|\']?\]', r'Out_\1',
+                            csource[start:end])
+            csource = csource[:start] + new_id + csource[end:]
+            offset = offset + (len(new_id) - (end - start))
+    return csource
 
 
-def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True):
+def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform=False):
     last_code_id = None
     non_code_map = defaultdict(list)
     code_cells = {}
     deps = defaultdict(list)
     out_tags = defaultdict(list)
     refs = {}
+
+
+    def grab_deps(cast,exec_count):
+        for node in ast.walk(cast.tree):
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+                out_ref = re.search('(?<=Out_)([0-9A-Fa-f]{' + str(DEFAULT_ID_LENGTH) + '})', node.id)
+                if out_ref:
+                    deps[exec_count].append(out_ref.group(0))
+                else:
+                    deps[exec_count].append(node.id)
+            # Grab magic lines and perform our own parsing
+            elif isinstance(node, ast.Call) and isinstance(node.func,
+                                                           ast.Attribute) and node.func.attr == 'run_line_magic' and node.args:
+                args = node.args
+                if args[0].s == 'split_out':
+                    for subnode in ast.walk(ast.parse(args[1].s)):
+                        if isinstance(subnode, ast.Name):
+                            deps[exec_count].append(subnode.id)
+
+    #FIXME: Give access to this somewhere
+    #This converts comments and strings as well not just in code identifiers
+    if (full_transform):
+        def transform(line):
+            # Changes Out[aaa] and Out["aaa"] to Out_aaa
+            return re.sub('Out\[[\"|\']?([0-9A-Fa-f]{' + str(DEFAULT_ID_LENGTH) + '})[\"|\']?\]', r'Out_\1', line)
+
+        out_transformer = IPython.core.inputtransformer.StatelessInputTransformer(transform)
+        transformers.append(out_transformer)
+
+    transformer = IPython.core.inputsplitter.IPythonInputSplitter(physical_line_transforms=transformers)
 
     if md_above:
         # reverse the cells
@@ -52,38 +112,19 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True):
                 if not isinstance(csource, str):
                     csource = "".join(csource)
                 csource = transformer.transform_cell(csource)
-                cast = ast.parse(csource)
-                if len(cast.body) > 0 and isinstance(cast.body[-1], ast.Expr):
-                    expr_val = cast.body[-1].value
-                    if isinstance(expr_val, ast.Tuple):
-                        tuple_eles = []
-                        named_flag = False
-                        for idx, elt in enumerate(expr_val.elts):
-                            if isinstance(elt, ast.Name):
-                                named_flag = True
-                                tuple_eles.append(ast.Name(elt.id, ast.Store))
-                            else:
-                                tuple_eles.append(ast.Name('Out_' + str(exec_count) + str(idx), ast.Store))
-                        if (named_flag):
-                            nnode = ast.Assign([ast.Tuple(tuple_eles,ast.Store)], expr_val)
-                            ast.fix_missing_locations(nnode)
-                            cast.body[-1] = nnode
-                for node in ast.walk(cast):
-                    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-                        out_ref = re.search('(?<=Out_)([0-9A-Fa-f]{'+str(DEFAULT_ID_LENGTH)+'})', node.id)
-                        if out_ref:
-                            deps[exec_count].append(out_ref.group(0))
-                        else:
-                            deps[exec_count].append(node.id)
-                    # Grab magic lines and perform our own parsing
-                    elif isinstance(node, ast.Call) and isinstance(node.func,
-                                                                   ast.Attribute) and node.func.attr == 'run_line_magic' and node.args:
-                        args = node.args
-                        if args[0].s == 'split_out':
-                            for subnode in ast.walk(ast.parse(args[1].s)):
-                                if isinstance(subnode, ast.Name):
-                                    deps[exec_count].append(subnode.id)
-                cell['source'] = DF_CELL_PREFIX + astor.to_source(cast).rstrip()
+                cast = asttokens.ASTTokens(csource, parse=True)
+
+
+                if not full_transform:
+                    csource = transform_out_refs(csource,cast)
+
+                csource = transform_last_node(csource,cast)
+
+                #Grab depedencies from cell
+                grab_deps(cast,exec_count)
+
+                cell['source'] = DF_CELL_PREFIX + csource.rstrip()
+
                 if ('outputs' in cell):
                     for output in cell['outputs']:
                         if ('metadata' in output and 'output_tag' in output['metadata']):

@@ -1,5 +1,7 @@
 import ast
 import astor
+#Adds tokens to the ast
+import asttokens
 import IPython.core
 from dfconvert.constants import DEFAULT_ID_LENGTH,DF_CELL_PREFIX,IPY_CELL_PREFIX
 import re
@@ -20,7 +22,7 @@ def transform_last_node(nnode):
             if isinstance(name,ast.Name):
                 reobj = re.search('(Out_)?([0-9A-Fa-f]{6})',name.id)
                 if(reobj):
-                    #Only need to reassign Assign to expression if it contains an O
+                    #Only need to reassign Assign to expression if it contains an Out reference
                     return ast.Expr(nnode.value)
     return nnode
 
@@ -45,10 +47,11 @@ def import_dfpynb(filename,d):
         if not isinstance(csource, str):
             csource = "".join(csource)
         csource = remove_magics.transform_cell(csource)
-        cast = ast.parse(csource)
-        if cast.body and isinstance(cast.body[-1], ast.Assign):
-            cast.body[-1] = transform_last_node(cast.body[-1])
-            csource = astor.to_source(cast)
+        cast = asttokens.ASTTokens(csource, parse=True)
+        if cast.tree.body and isinstance(cast.tree.body[-1], ast.Assign):
+            nnode = transform_last_node(cast.tree.body[-1])
+            start, end = cast.tree.body[-1].last_token.startpos, cast.tree.body[-1].last_token.endpos
+            csource = csource[:start] + astor.to_source(nnode) + csource[end:]
         csource = IPY_CELL_PREFIX + transformer.transform_cell(csource).rstrip()
         cell['execution_count'] = exec_count
         cell['source'] = csource
