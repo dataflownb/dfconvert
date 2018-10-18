@@ -1,0 +1,29 @@
+# http://travis-ci.org/#!/ipython/ipython
+language: python
+
+cache:
+    directories:
+        - $HOME/.cache/bower
+        - $HOME/.cache/pip
+python:
+    - 3.5
+    - 3.6
+    - 3.7
+
+sudo: required
+
+env:
+  global:
+    - PATH=$TRAVIS_BUILD_DIR/pandoc:$PATH
+
+before_install:
+    - pip install --upgrade pip
+    - pip install --upgrade setuptools wheel nose nose-exclude pytest coverage codecov
+install:
+    - pip install -e .[test]
+
+script:
+    - 'py.test -sv dfconvert/tests; fi'
+
+after_success:
+    - codecov

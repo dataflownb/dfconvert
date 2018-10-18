@@ -1,0 +1,6 @@
+
+\.ipynb_checkpoints/
+
+dfconvert\.egg-info/
+
+dfconvert/__pycache__/
