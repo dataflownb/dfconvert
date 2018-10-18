@@ -48,5 +48,9 @@ for more information.
     ]
 )
 
+extras_require = setuptools_args['extras_require'] = {
+    'test': ['nbformat', 'nose-timer'],
+}
+
 if __name__ == '__main__':
     setup(**setup_args)
