@@ -27,8 +27,8 @@ def transform_last_node(nnode):
     return nnode
 
 
-out_transformer = IPython.core.inputtransformer.StatelessInputTransformer(transform)
-comment_remover = IPython.core.inputtransformer.StatelessInputTransformer(remove_comment)
+out_transformer = IPython.core.inputtransformer2.StatelessInputTransformer(transform)
+comment_remover = IPython.core.inputtransformer2.StatelessInputTransformer(remove_comment)
 
 transformer = IPython.core.inputsplitter.IPythonInputSplitter(physical_line_transforms=[out_transformer,comment_remover])
 remove_magics = IPython.core.inputsplitter.IPythonInputSplitter()
