@@ -9,36 +9,42 @@ import asttokens
 import IPython.core
 import re
 import astor
+import sys
 
 
 transformers = []
 
 def remove_comment(line):
     #Removes comments from export.py
-    return line.replace(IPY_CELL_PREFIX[:-2],'')
+    return line.replace(IPY_CELL_PREFIX,'')
 
 
 comment_remover = IPython.core.inputtransformer.StatelessInputTransformer(remove_comment)
 transformers.append(comment_remover)
 
 
-def transform_last_node(csource,cast):
+def transform_last_node(csource,cast,exec_count):
+    if isinstance(exec_count,int):
+        exec_count = ("{0:#0{1}x}".format(int(exec_count),8))[2:]
     if len(cast.tree.body) > 0 and isinstance(cast.tree.body[-1], ast.Expr):
         expr_val = cast.tree.body[-1].value
         if isinstance(expr_val, ast.Tuple):
             tuple_eles = []
             named_flag = False
+            out_exists = False
             for idx, elt in enumerate(expr_val.elts):
                 if isinstance(elt, ast.Name):
                     named_flag = True
                     tuple_eles.append(ast.Name(elt.id, ast.Store))
                 else:
-                    tuple_eles.append(ast.Name('Out_' + str(exec_count) + str(idx), ast.Store))
+                    out_exists = True
+                    tuple_eles.append(ast.Name('Out_' + str(exec_count) + '['+str(idx)+']', ast.Store))
             if (named_flag):
                 nnode = ast.Assign([ast.Tuple(tuple_eles, ast.Store)], expr_val)
+                out_assign = 'Out_'+str(exec_count)+' = []\n' if out_exists else ''
                 ast.fix_missing_locations(nnode)
-                start,end = cast.tree.body[-1].last_token.startpos, cast.tree.body[-1].last_token.endpos
-                csource = csource[:start] + astor.to_source(nnode) + csource[end:]
+                start,end = cast.tree.body[-1].first_token.startpos, cast.tree.body[-1].last_token.endpos
+                csource = csource[:start] + out_assign + astor.to_source(nnode) + csource[end:]
     return csource
 
 def transform_out_refs(csource,cast):
@@ -118,7 +124,7 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
                 if not full_transform:
                     csource = transform_out_refs(csource,cast)
 
-                csource = transform_last_node(csource,cast)
+                csource = transform_last_node(csource,cast,exec_count)
 
                 #Grab depedencies from cell
                 grab_deps(cast,exec_count)
