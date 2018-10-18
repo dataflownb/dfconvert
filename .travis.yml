@@ -22,7 +22,7 @@ install:
     - pip install -e .[test]
 
 script:
-    - 'py.test -sv dfconvert/tests; fi'
+    - py.test -sv dfconvert/tests
 
 matrix:
   include:
