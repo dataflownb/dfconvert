@@ -19,7 +19,7 @@ def remove_comment(line):
     return line.replace(IPY_CELL_PREFIX,'')
 
 
-comment_remover = IPython.core.inputtransformer2.StatelessInputTransformer(remove_comment)
+comment_remover = IPython.core.inputtransformer.StatelessInputTransformer(remove_comment)
 transformers.append(comment_remover)
 
 
@@ -93,7 +93,7 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
             # Changes Out[aaa] and Out["aaa"] to Out_aaa
             return re.sub('Out\[[\"|\']?([0-9A-Fa-f]{' + str(DEFAULT_ID_LENGTH) + '})[\"|\']?\]', r'Out_\1', line)
 
-        out_transformer = IPython.core.inputtransformer2.StatelessInputTransformer(transform)
+        out_transformer = IPython.core.inputtransformer.StatelessInputTransformer(transform)
         transformers.append(out_transformer)
 
     transformer = IPython.core.inputsplitter.IPythonInputSplitter(physical_line_transforms=transformers)
