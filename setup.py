@@ -36,7 +36,7 @@ for more information.
         'asttokens>1.1'
     ],
     extras_require={
-    'test': ['nbformat', 'nose-timer'],
+    'test': ['nbformat', 'nose-timer','nbconvert'],
     },
     classifiers=[
         'Intended Audience :: Developers',
