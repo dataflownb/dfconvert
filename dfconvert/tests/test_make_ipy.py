@@ -32,3 +32,27 @@ def test_valid_nb():
     #Test will fail if this notebook does not validate
     #Upon a validation failure nbformat will raise a ValidationError
     nbformat.validate(new_nb)
+
+def test_execute_produced_nb():
+    from nbconvert.preprocessors import ExecutePreprocessor
+    fname = 'topology-test'
+    ext = '.ipynb'
+    nb = nbformat.read('./dfconvert/tests/example/' + fname + ext, nbformat.NO_CONVERT)
+    ipy.export_dfpynb(nb, in_fname=fname + ext)
+    new_nb = nbformat.read('./' + fname + '_ipy.ipynb', nbformat.NO_CONVERT)
+    # This is code that createse and executes the topological test to confirm the correct topology is created
+    # This should only generally fail if something is changed about nbconvert
+    ep = ExecutePreprocessor(timeout=30)
+    out = ep.preprocess(new_nb, {'metadata': {'path': ''}})
+    with open('./'+fname+'_ipy.ipynb','wt') as f:
+        nbformat.write(new_nb,f)
+
+def test_compare_results():
+    fname = 'topology-test'
+    with open('./'+fname+'_ipy.ipynb','r') as f:
+        nb = nbformat.read(f,nbformat.NO_CONVERT)
+        answers = [10,20,60,110]
+        #Ignore last cell because it's empty
+        for num, cell in enumerate(nb['cells'][:-1]):
+            #Check the first output and compare it to our known values
+            assert int(cell['outputs'][0]['data']['text/plain']) == answers[num]
