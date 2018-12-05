@@ -3,9 +3,11 @@ from dfconvert.constants import IPY_CELL_PREFIX
 import nbformat
 import asttokens
 
-files = ['topology-test']
+#file_answers is for topological maps all answers are always in a toplogical order
+#maps on the other hand can be in any order and will fail otherwise
 file_answers = {'topology-test':[10,20,60,110]}
-
+maps = {'named_vars':[106,10,20,30,60,46],'mappings':[100,150,100,100,130,110,110],'tag_flag_test':[3,4,4]}
+files = list(file_answers) + list(maps)
 
 def test_comment_remove():
     content = 'a=2\na+3\n'
@@ -43,7 +45,7 @@ def test_execute_produced_nb():
     ext = '.ipynb'
     for fname in files:
         nb = nbformat.read('./dfconvert/tests/example/' + fname + ext, nbformat.NO_CONVERT)
-        ipy.export_dfpynb(nb, in_fname=fname + ext)
+        ipy.export_dfpynb(nb, in_fname=fname + ext,out_mode=True)
         new_nb = nbformat.read('./' + fname + '_ipy.ipynb', nbformat.NO_CONVERT)
         # This is code that createse and executes the topological test to confirm the correct topology is created
         # This should only generally fail if something is changed about nbconvert
@@ -55,12 +57,26 @@ def test_execute_produced_nb():
 def test_compare_results():
     """Compares the results of our knowns to the re-executed results in ipykernel,
     correct answers are in file_answers dict"""
-    for fname in files:
+    for fname in file_answers.keys():
         with open('./'+fname+'_ipy.ipynb','r') as f:
             nb = nbformat.read(f,nbformat.NO_CONVERT)
-            answers = file_answers[fname]
+            answers = iter(file_answers[fname])
             #Ignore last cell because it's empty
-            for num, cell in enumerate(nb['cells'][:-1]):
-                #Check the first output and compare it to our known values
-                #will need to be changed if multiple objects are output
-                assert int(cell['outputs'][0]['data']['text/plain']) == answers[num]
+            for cell in enumerate(nb['cells']):
+                if 'outputs' in cell and len(cell['outputs']):
+                    #Check the first output and compare it to our known values
+                    #will need to be changed if multiple objects are output
+                    assert int(cell['outputs'][0]['data']['text/plain']) == next(answers)
+
+def test_mapping_results():
+    """Makes sure that you get the correct mapping results similar to test_compare_results but with
+    more non-deterministic outputs"""
+    for fname in maps.keys():
+        with open('./'+fname+'_ipy.ipynb','r') as f:
+            nb = nbformat.read(f,nbformat.NO_CONVERT)
+            answers = maps[fname]
+            ans = []
+            for num,cell in enumerate(nb['cells']):
+                if 'outputs' in cell and len(cell['outputs']):
+                    ans.append(eval(cell['outputs'][0]['data']['text/plain']))
+            assert len([val for val in ans if val in answers]) == len(answers)
