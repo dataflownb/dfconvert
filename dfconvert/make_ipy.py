@@ -58,7 +58,7 @@ def transform_last_node(csource,cast,exec_count):
 
 def out_assign(csource,cast,exec_count,tags):
     #This is a special case where an a,3 type assignment happens
-    tag_flag = bool([True if exec_count in (tag[:6] for tag in tags) else False].count(True))
+    tag_flag = bool([True if exec_count in (tag[:DEFAULT_ID_LENGTH] for tag in tags) else False].count(True))
     if tag_flag:
         if isinstance(cast.tree.body[-1], ast.Assign):
             new_node = ast.Name('Out_' + str(exec_count), ast.Store)
