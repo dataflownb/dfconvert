@@ -1,5 +1,4 @@
 import dfconvert.make_ipy as ipy
-from dfconvert.constants import IPY_CELL_PREFIX
 import nbformat
 import asttokens
 import os.path
@@ -11,10 +10,6 @@ map_files = ['named_vars','mappings','tag_flag_test']
 maps = {}
 files = list(file_answers) + list(maps)
 
-def test_comment_remove():
-    content = 'a=2\na+3\n'
-    cell = IPY_CELL_PREFIX+content+IPY_CELL_PREFIX
-    assert ipy.remove_comment(cell) == content
 
 def test_last_node_trans():
     csource = 'a = 4\na,3,4'
