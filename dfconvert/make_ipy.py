@@ -12,6 +12,15 @@ import astor
 import sys
 
 
+cell_template = {
+   "cell_type": "code",
+   "execution_count": None,
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+
+
 transformers = []
 
 def remove_comment(line):
@@ -47,6 +56,37 @@ def transform_last_node(csource,cast,exec_count):
                 csource = csource[:start] + out_assign + astor.to_source(nnode) + csource[end:]
     return csource
 
+def out_assign(csource,cast,exec_count,tags):
+    #This is a special case where an a,3 type assignment happens
+    tag_flag = bool([True if exec_count in (tag[:6] for tag in tags) else False].count(True))
+    if tag_flag:
+        if isinstance(cast.tree.body[-1], ast.Assign):
+            new_node = ast.Name('Out_' + str(exec_count), ast.Store)
+            nnode = cast.tree.body[-1]
+            out_targets = nnode.targets.pop()
+            nnode.targets.append(new_node)
+            ast.fix_missing_locations(nnode)
+            start, end = cast.tree.body[-1].first_token.startpos, cast.tree.body[-1].last_token.endpos
+            csource = csource[:start] + astor.to_source(nnode) + csource[end:]
+        return csource, out_targets
+    if len(cast.tree.body) < 1:
+        return csource, []
+    if isinstance(cast.tree.body[-1],ast.Expr):
+        expr_val = cast.tree.body[-1].value
+        nnode = ast.Assign([ast.Name('Out_' + str(exec_count), ast.Store)], expr_val)
+        ast.fix_missing_locations(nnode)
+        start, end = cast.tree.body[-1].first_token.startpos, cast.tree.body[-1].last_token.endpos
+        csource = csource[:start] + astor.to_source(nnode) + csource[end:]
+    elif isinstance(cast.tree.body[-1],ast.Assign):
+        new_node = ast.Name('Out_'+str(exec_count),ast.Store)
+        nnode = cast.tree.body[-1]
+        nnode.targets.append(new_node)
+        ast.fix_missing_locations(nnode)
+        start, end = cast.tree.body[-1].first_token.startpos, cast.tree.body[-1].last_token.endpos
+        csource = csource[:start] + astor.to_source(nnode) + csource[end:]
+    return csource, []
+
+
 def transform_out_refs(csource,cast):
     offset = 0
     #Depth first traversal otherwise offset won't be accurate
@@ -60,7 +100,7 @@ def transform_out_refs(csource,cast):
     return csource
 
 
-def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform=False):
+def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform=False,out_mode=False):
     last_code_id = None
     non_code_map = defaultdict(list)
     code_cells = {}
@@ -111,6 +151,7 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
             # we want to ignore cells without any execution count
             if ('execution_count' in cell):
                 exec_count = hex(cell['execution_count'])[2:].zfill(DEFAULT_ID_LENGTH)
+
                 if 'metadata' in cell:
                     cell.metadata.dfkernel_old_id = cell['execution_count']
                 last_code_id = exec_count
@@ -124,20 +165,54 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
                 if not full_transform:
                     csource = transform_out_refs(csource,cast)
 
+
                 csource = transform_last_node(csource,cast,exec_count)
 
                 #Grab depedencies from cell
                 grab_deps(cast,exec_count)
 
-                cell['source'] = DF_CELL_PREFIX + csource.rstrip()
 
+                #Create list of all out_tags
+                valid_tags = []
                 if ('outputs' in cell):
                     for output in cell['outputs']:
                         if ('metadata' in output and 'output_tag' in output['metadata']):
-                            out_tag = output['metadata']['output_tag']
-                            out_tags[exec_count].append(out_tag)
-                            refs[out_tag] = exec_count
-                code_cells[exec_count] = cell
+                            valid_tags.append(output['metadata']['output_tag'])
+
+
+
+                cast = asttokens.ASTTokens(csource, parse=True)
+                #Finish up by assigning all final expressions if they still don't have a value
+                csource,out_targets = out_assign(csource,cast,exec_count,valid_tags)
+                cell['source'] = DF_CELL_PREFIX + csource.rstrip()
+
+
+                for out_tag in valid_tags:
+                    out_tags[exec_count].append(out_tag)
+                    refs[out_tag] = exec_count
+                code_cells[exec_count] = [cell]
+                if out_mode:
+                    tree = ast.parse(cell['source'])
+                    if out_targets:
+                        if isinstance(out_targets, ast.Tuple):
+                            for j in out_targets.elts:
+                                new_cell = dict(cell_template)
+                                new_cell['source'] = DF_CELL_PREFIX + str(astor.to_source(j)).rstrip()
+                                code_cells[exec_count].append(new_cell)
+                    if tree.body and isinstance(tree.body[-1], ast.Assign) and isinstance(tree.body[-1].targets, list):
+                        for count, i in enumerate(tree.body[-1].targets):
+                            if len(tree.body[-1].targets) == count+1 and isinstance(i,ast.Name) and len(code_cells[exec_count]) == 1:
+                                new_cell = dict(cell_template)
+                                new_cell['source'] = DF_CELL_PREFIX + str(i.id)
+                                code_cells[exec_count].append(new_cell)
+                            if isinstance(i, ast.Tuple):
+                                for j in i.elts:
+                                    if isinstance(j, ast.Name):
+                                        new_cell = dict(cell_template)
+                                        new_cell['source'] = DF_CELL_PREFIX + str(j.id)
+                                        code_cells[exec_count].append(new_cell)
+                if exec_count not in deps:
+                    deps[exec_count] = []
             else:
                 continue
 
@@ -160,10 +235,11 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
                 deps[tag][idx] = refs[dep]
 
     topo_deps = list(topological(deps))
+
     while topo_deps:
         cid = topo_deps.pop()
         cells.extend(non_code_map[cid])
-        cells.append(code_cells[cid])
+        cells.extend(code_cells[cid])
 
     d['cells'] = cells
 
