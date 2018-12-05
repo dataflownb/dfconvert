@@ -6,7 +6,8 @@ import asttokens
 #file_answers is for topological maps all answers are always in a toplogical order
 #maps on the other hand can be in any order and will fail otherwise
 file_answers = {'topology-test':[10,20,60,110]}
-maps = {'named_vars':[106,10,20,30,60,46],'mappings':[100,150,100,100,130,110,110],'tag_flag_test':[3,4,4]}
+map_files = ['named_vars','mappings','tag_flag_test']
+maps = {}
 files = list(file_answers) + list(maps)
 
 def test_comment_remove():
@@ -45,6 +46,12 @@ def test_execute_produced_nb():
     ext = '.ipynb'
     for fname in files:
         nb = nbformat.read('./dfconvert/tests/example/' + fname + ext, nbformat.NO_CONVERT)
+        if(fname in map_files):
+            maps[fname] = []
+            for cell in nb['cells']:
+                if 'output' in cell:
+                    for out in cell['outputs']:
+                        maps[fname].append(out['data']['text/plain'])
         ipy.export_dfpynb(nb, in_fname=fname + ext,out_mode=True)
         new_nb = nbformat.read('./' + fname + '_ipy.ipynb', nbformat.NO_CONVERT)
         # This is code that createse and executes the topological test to confirm the correct topology is created
@@ -78,5 +85,5 @@ def test_mapping_results():
             ans = []
             for num,cell in enumerate(nb['cells']):
                 if 'outputs' in cell and len(cell['outputs']):
-                    ans.append(eval(cell['outputs'][0]['data']['text/plain']))
+                    ans.append(cell['outputs'][0]['data']['text/plain'])
             assert len([val for val in ans if val in answers]) == len(answers)
