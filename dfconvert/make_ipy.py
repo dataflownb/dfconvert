@@ -1,7 +1,7 @@
 from collections import defaultdict
 import json
 import os
-from dfconvert.constants import DEFAULT_ID_LENGTH,DF_CELL_PREFIX,IPY_CELL_PREFIX
+from dfconvert.constants import DEFAULT_ID_LENGTH,DF_CELL_PREFIX
 from dfconvert.topological import topological
 import ast
 #Adds tokens to the ast
@@ -22,14 +22,6 @@ cell_template = {
 
 
 transformers = []
-
-def remove_comment(line):
-    #Removes comments from export.py
-    return line.replace(IPY_CELL_PREFIX,'')
-
-
-comment_remover = IPython.core.inputtransformer.StatelessInputTransformer(remove_comment)
-transformers.append(comment_remover)
 
 
 def transform_last_node(csource,cast,exec_count):
