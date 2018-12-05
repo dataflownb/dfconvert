@@ -25,10 +25,10 @@ import dfconvert.make_ipy as ipy
 file_name = 'mynotebook.ipynb'
 nb = nbformat.read(file_name,nbformat.NO_CONVERT)
 new_file_name = 'mynewnotebook.ipynb'
-dfpy.export_dfpynb(nb, in_fname=file_name, out_fname=new_file_name, md_above=True,full_transform=False)
+dfpy.export_dfpynb(nb, in_fname=file_name, out_fname=new_file_name, md_above=True,full_transform=False,out_mode=False)
 ```
 
-This will create a notebook with `out_fname` as an ipykernel compatible notebook if `out_fname` is not set then a file will be created with `file_name` that includes a `_dfpy` before the extension to ensure that files do not become overwritten. `md_above` is a flag for marking markdown cells at the top of the notebook and sending the `full_transform` flag set to true will also convert all `Out[aaaaaa]` style references including those that are inside of comments and inside of strings, by default this set to off.
+This will create a notebook with `out_fname` as an ipykernel compatible notebook if `out_fname` is not set then a file will be created with `file_name` that includes a `_dfpy` before the extension to ensure that files do not become overwritten. `md_above` is a flag for marking markdown cells at the top of the notebook and sending the `full_transform` flag set to true will also convert all `Out[aaaaaa]` style references including those that are inside of comments and inside of strings, by default this set to off. `out_mode` is an additional flag that will make sure that if a cell has any output that is normally created in the dfkernel that this output will be shown in a new cell in the `ipykernel`, this will be repeated for all results found in a tuple. 
 
 Similarly for converting to `dfkernel` compatible notebooks you can call
 ```
