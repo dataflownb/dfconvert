@@ -2,6 +2,7 @@ import dfconvert.make_ipy as ipy
 from dfconvert.constants import IPY_CELL_PREFIX
 import nbformat
 import asttokens
+import os.path
 
 #file_answers is for topological maps all answers are always in a toplogical order
 #maps on the other hand can be in any order and will fail otherwise
@@ -32,9 +33,9 @@ def test_valid_nb():
     """Should only need to test a single Notebook for validity, this is exclusively a validity test"""
     fname = 'digits-classification-df'
     ext = '.ipynb'
-    nb = nbformat.read('./dfconvert/tests/example/'+fname+ext,nbformat.NO_CONVERT)
+    nb = nbformat.read(os.path.join('./dfconvert/tests/example/',fname+ext),nbformat.NO_CONVERT)
     ipy.export_dfpynb(nb,in_fname=fname+ext)
-    new_nb = nbformat.read('./'+fname+'_ipy.ipynb',nbformat.NO_CONVERT)
+    new_nb = nbformat.read(os.path.join('./',fname+'_ipy.ipynb'),nbformat.NO_CONVERT)
     #Test will fail if this notebook does not validate
     #Upon a validation failure nbformat will raise a ValidationError
     nbformat.validate(new_nb)
@@ -45,7 +46,7 @@ def test_execute_produced_nb():
     from nbconvert.preprocessors import ExecutePreprocessor
     ext = '.ipynb'
     for fname in files:
-        nb = nbformat.read('./dfconvert/tests/example/' + fname + ext, nbformat.NO_CONVERT)
+        nb = nbformat.read(os.path.join('./dfconvert/tests/example/',fname + ext), nbformat.NO_CONVERT)
         if(fname in map_files):
             maps[fname] = []
             for cell in nb['cells']:
@@ -53,19 +54,19 @@ def test_execute_produced_nb():
                     for out in cell['outputs']:
                         maps[fname].append(out['data']['text/plain'])
         ipy.export_dfpynb(nb, in_fname=fname + ext,out_mode=True)
-        new_nb = nbformat.read('./' + fname + '_ipy.ipynb', nbformat.NO_CONVERT)
+        new_nb = nbformat.read(os.path.join('./', fname + '_ipy.ipynb'), nbformat.NO_CONVERT)
         # This is code that createse and executes the topological test to confirm the correct topology is created
         # This should only generally fail if something is changed about nbconvert
         ep = ExecutePreprocessor(timeout=30)
         out = ep.preprocess(new_nb, {'metadata': {'path': ''}})
-        with open('./'+fname+'_ipy.ipynb','wt') as f:
+        with open(os.path.join('./',fname+'_ipy.ipynb'),'wt') as f:
             nbformat.write(new_nb,f)
 
 def test_compare_results():
     """Compares the results of our knowns to the re-executed results in ipykernel,
     correct answers are in file_answers dict"""
     for fname in file_answers.keys():
-        with open('./'+fname+'_ipy.ipynb','r') as f:
+        with open(os.path.join('./',fname+'_ipy.ipynb'),'r') as f:
             nb = nbformat.read(f,nbformat.NO_CONVERT)
             answers = iter(file_answers[fname])
             #Ignore last cell because it's empty
@@ -79,7 +80,7 @@ def test_mapping_results():
     """Makes sure that you get the correct mapping results similar to test_compare_results but with
     more non-deterministic outputs"""
     for fname in maps.keys():
-        with open('./'+fname+'_ipy.ipynb','r') as f:
+        with open(os.path.join('./',fname+'_ipy.ipynb'),'r') as f:
             nb = nbformat.read(f,nbformat.NO_CONVERT)
             answers = maps[fname]
             ans = []

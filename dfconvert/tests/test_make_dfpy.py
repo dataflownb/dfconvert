@@ -3,6 +3,7 @@ from dfconvert.constants import DF_CELL_PREFIX
 import ast
 import astor
 import nbformat
+import os.path
 
 def test_transform():
     assert dfpy.transform('Out_aaaaaa') == 'Out[aaaaaa]'
@@ -21,9 +22,9 @@ def test_last_node_trans():
 def test_valid_nb():
     fname = 'digits-classification-df'
     ext = '_ipy.ipynb'
-    nb = nbformat.read('./dfconvert/tests/example/'+fname+ext,nbformat.NO_CONVERT)
+    nb = nbformat.read(os.path.join('./dfconvert/tests/example/',fname+ext),nbformat.NO_CONVERT)
     dfpy.import_dfpynb(fname+ext,nb)
-    new_nb = nbformat.read('./'+fname+'_dfpy.ipynb',nbformat.NO_CONVERT)
+    new_nb = nbformat.read(os.path.join('./',fname+'_dfpy.ipynb'),nbformat.NO_CONVERT)
     #Test will fail if this notebook does not validate
     #Upon a validation failure nbformat will raise a ValidationError
     nbformat.validate(new_nb)
