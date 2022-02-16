@@ -21,8 +21,6 @@ cell_template = {
   }
 
 
-transformers = []
-
 
 def transform_last_node(csource,cast,exec_count):
     if isinstance(exec_count,int):
@@ -126,9 +124,7 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
             return re.sub('Out\[[\"|\']?([0-9A-Fa-f]{' + str(DEFAULT_ID_LENGTH) + '})[\"|\']?\]', r'Out_\1', line)
 
         out_transformer = IPython.core.inputtransformer.StatelessInputTransformer(transform)
-        transformers.append(out_transformer)
 
-    transformer = IPython.core.inputsplitter.IPythonInputSplitter(physical_line_transforms=transformers)
 
     if md_above:
         # reverse the cells
@@ -150,7 +146,9 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
                 csource = cell['source']
                 if not isinstance(csource, str):
                     csource = "".join(csource)
-                csource = transformer.transform_cell(csource)
+
+                csource = IPython.core.inputtransformer2.TransformerManager().transform_cell(csource)
+
                 cast = asttokens.ASTTokens(csource, parse=True)
 
 
