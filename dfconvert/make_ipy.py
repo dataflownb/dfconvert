@@ -47,6 +47,10 @@ def transform_last_node(csource,cast,exec_count):
     return csource
 
 def out_assign(csource,cast,exec_count,tags):
+    print("csource", csource)
+    print("cast", cast)
+    print("exec_count", exec_count)
+    print("tags", tags)
     #This is a special case where an a,3 type assignment happens
     tag_flag = bool([True if exec_count in (tag[:DEFAULT_ID_LENGTH] for tag in tags) else False].count(True))
     if tag_flag:
@@ -68,7 +72,10 @@ def out_assign(csource,cast,exec_count,tags):
         start, end = cast.tree.body[-1].first_token.startpos, cast.tree.body[-1].last_token.endpos
         csource = csource[:start] + astor.to_source(nnode) + csource[end:]
     elif isinstance(cast.tree.body[-1],ast.Assign):
-        new_node = ast.Name('Out_'+str(exec_count),ast.Store)
+        tag_expr = ''
+        for tag_id in tags:
+            tag_expr += tag_id+'_'+str(exec_count) + ", "
+        new_node = ast.Name(tag_expr[:-2], ast.Store)
         nnode = cast.tree.body[-1]
         nnode.targets.append(new_node)
         ast.fix_missing_locations(nnode)
@@ -87,6 +94,32 @@ def transform_out_refs(csource,cast):
                             csource[start:end])
             csource = csource[:start] + new_id + csource[end:]
             offset = offset + (len(new_id) - (end - start))
+    return csource
+
+
+def clean_cell(cell):
+    identifier_pattern = '[a-zA-Z_]\w*'
+    id_pattern = '\w'*(DEFAULT_ID_LENGTH+2)
+    new_cell = cell
+    #This part is used to replace a$cell_id in particular cell
+    pattern = identifier_pattern + '\$' + id_pattern
+    for match in re.finditer(pattern, cell):
+        start, end = match.start(), match.end()
+        identifier_var, cell_id = cell[start: end].split('$')
+        renamed_var = identifier_var + "_" + cell_id
+        new_cell = new_cell.replace(cell[start:end], renamed_var)
+
+    #This part is used to replace Out['cell_id'] in particular cell
+    csource = new_cell
+    pattern2 = 'Out\[[\'\"]' + id_pattern + '[\'\"]\]'
+    for match in re.finditer(pattern2, new_cell):
+        start, end = match.start(), match.end()
+        cell_id = re.findall(id_pattern, new_cell[start:end])[0]
+        renamed_var = "Out_"+ cell_id
+        csource = csource.replace(new_cell[start:end], renamed_var)
+
+    # This below regex line can be used if we want to remove the cell id after the referenced variable
+    # csource = re.sub('\$' + id_pattern, '', cell)
     return csource
 
 
@@ -141,9 +174,11 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
                 exec_count = hex(cell['execution_count'])[2:].zfill(DEFAULT_ID_LENGTH)
 
                 if 'metadata' in cell:
+                    exec_count = cell['metadata']['dfnotebook']['id'][:DEFAULT_ID_LENGTH+2]
                     cell.metadata.dfkernel_old_id = cell['execution_count']
                 last_code_id = exec_count
-                csource = cell['source']
+                #Remove cell id concatenated with identifiers and give it name of the format Out_
+                csource = clean_cell(cell['source'])
                 if not isinstance(csource, str):
                     csource = "".join(csource)
 
@@ -151,12 +186,15 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
 
                 cast = asttokens.ASTTokens(csource, parse=True)
 
-
+                print("csource before full_transform transform_out_refs", csource)
                 if not full_transform:
                     csource = transform_out_refs(csource,cast)
+                print("csource after full_transform transform_out_refs", csource)
 
 
+                print("csource before transform_last_node", csource)                
                 csource = transform_last_node(csource,cast,exec_count)
+                print("csource after transform_last_node", csource)
 
                 #Grab depedencies from cell
                 grab_deps(cast,exec_count)
@@ -172,8 +210,12 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
 
 
                 cast = asttokens.ASTTokens(csource, parse=True)
+
+                print("csource before out_assign", csource)
                 #Finish up by assigning all final expressions if they still don't have a value
                 csource,out_targets = out_assign(csource,cast,exec_count,valid_tags)
+                print("csource after out_assign", csource, "|out_targets:",out_targets)
+
                 cell['source'] = DF_CELL_PREFIX + csource.rstrip()
 
 
