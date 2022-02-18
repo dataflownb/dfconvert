@@ -1,7 +1,7 @@
 from collections import defaultdict
 import json
 import os
-from dfconvert.constants import DEFAULT_ID_LENGTH,DF_CELL_PREFIX
+from dfconvert.constants import DEFAULT_ID_LENGTH,DF_CELL_PREFIX, IDENTIFIER_PATTERN, ID_PATTERN
 from dfconvert.topological import topological
 import ast
 #Adds tokens to the ast
@@ -107,35 +107,86 @@ def transform_out_refs(csource,cast):
         return None
 
 
-def clean_cell(cell):
+def clean_cell(csource):
     try:
-        identifier_pattern = '[a-zA-Z_]\w*'
-        id_pattern = '\w'*(DEFAULT_ID_LENGTH+2)
-        new_cell = cell
+        new_cell = csource
         #This part is used to replace a$cell_id in particular cell
-        pattern = identifier_pattern + '\$' + id_pattern
-        for match in re.finditer(pattern, cell):
+        pattern = IDENTIFIER_PATTERN + '\$' + ID_PATTERN
+        for match in re.finditer(pattern, csource):
             start, end = match.start(), match.end()
-            identifier_var, cell_id = cell[start: end].split('$')
+            identifier_var, cell_id = csource[start: end].split('$')
             renamed_var = identifier_var + "_" + cell_id
-            new_cell = new_cell.replace(cell[start:end], renamed_var)
+            new_cell = new_cell.replace(csource[start:end], renamed_var)
 
         #This part is used to replace Out['cell_id'] in particular cell
         csource = new_cell
-        pattern2 = 'Out\[[\'\"]' + id_pattern + '[\'\"]\]'
+        pattern2 = 'Out\[[\'\"]' + ID_PATTERN + '[\'\"]\]'
         for match in re.finditer(pattern2, new_cell):
             start, end = match.start(), match.end()
-            cell_id = re.findall(id_pattern, new_cell[start:end])[0]
+            cell_id = re.findall(ID_PATTERN, new_cell[start:end])[0]
             renamed_var = "Out_"+ cell_id
             csource = csource.replace(new_cell[start:end], renamed_var)
 
         # This below regex line can be used if we want to remove the cell id after the referenced variable
-        # csource = re.sub('\$' + id_pattern, '', cell)
+        # csource = re.sub('\$' + ID_PATTERN, '', cell)
         return csource
     except Exception as E:
         exc_type, exc_obj, exc_tb = sys.exc_info()
         print('Exception in method clean_cell: %s at %s',str(E), str(exc_tb.tb_lineno))
         return None
+
+
+def count_id_referenced_variables(csource, id_referenced_hmap):
+    try:
+        pattern = IDENTIFIER_PATTERN + '_' + ID_PATTERN
+        for match in re.finditer(pattern, csource):
+            renamed_var = csource[match.start():match.end()]
+            var_name, var_id = renamed_var[:-(DEFAULT_ID_LENGTH+3)], renamed_var[-(DEFAULT_ID_LENGTH+2):]
+            if var_name in id_referenced_hmap.keys():
+                id_referenced_hmap[var_name].add(var_id)
+            else:
+                id_referenced_hmap[var_name] = {var_id}
+        return id_referenced_hmap
+    except Exception as E:
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        print('Exception in method count_id_referenced_variables: %s at %s',str(E), str(exc_tb.tb_lineno))
+        return None
+
+
+def clean_unused_id(code_cells, id_referenced_hmap):
+    try:
+        pattern = IDENTIFIER_PATTERN + '_' + ID_PATTERN
+        for cell_key, cell_val in code_cells.items():
+            csource = cell_val[0]['source']
+            csource_copy = csource
+            for match in re.finditer(pattern, csource):
+                identifier_var = csource[match.start(): match.end()][:-(DEFAULT_ID_LENGTH+3)]
+                if len(id_referenced_hmap.get(identifier_var, {})) == 1:
+                    csource_copy = re.sub("=[ \t]+"+identifier_var + '_' + list(id_referenced_hmap[identifier_var])[0] + "[ \t]+=", "=", csource_copy)
+                    csource_copy = re.sub(identifier_var + '_' + list(id_referenced_hmap[identifier_var])[0], identifier_var, csource_copy)
+                    csource_ast = ast.parse(csource_copy)
+                    csource_ast_targets = csource_ast.body[-1].targets
+                    if len(csource_ast_targets) >= 1:
+                        pop_index = []
+                        for target_i in range(1, len(csource_ast_targets)):
+                            remove_multiple_assign = 0
+                            for elts_i, elts in enumerate(csource_ast_targets[target_i].elts):
+                                if csource_ast_targets[target_i].elts[elts_i].id != csource_ast.body[-1].targets[target_i-1].elts[elts_i].id:
+                                    remove_multiple_assign = 1
+                                    break
+                            if not remove_multiple_assign:
+                                pop_index.append(target_i-1)
+                        for i in sorted(pop_index, reverse=True):
+                            csource_ast_targets.pop(i)
+                    csource_copy = DF_CELL_PREFIX + str(astor.to_source(csource_ast)).rstrip()
+
+            cell_val[0]['source'] = csource_copy
+        return code_cells
+    except Exception as E:
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        print('Exception in method clean_unused_id: %s at %s',str(E), str(exc_tb.tb_lineno))
+        return None
+
 
 
 def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform=False,out_mode=False):
@@ -146,6 +197,9 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
         deps = defaultdict(list)
         out_tags = defaultdict(list)
         refs = {}
+        #Maintain a hashmap for variables of the form var_id
+        id_referenced_hmap = {}
+
 
 
         def grab_deps(cast,exec_count):
@@ -231,6 +285,10 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
 
                     cell['source'] = DF_CELL_PREFIX + csource.rstrip()
 
+                    #Maintain a hashmap for var_id to clean the _id format incase it is not assigned 
+                    #multiple times in the notebook.
+                    id_referenced_hmap = count_id_referenced_variables(csource, id_referenced_hmap)
+
 
                     for out_tag in valid_tags:
                         out_tags[exec_count].append(out_tag)
@@ -260,6 +318,7 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
                         deps[exec_count] = []
                 else:
                     continue
+        code_cells = clean_unused_id(code_cells, id_referenced_hmap)
 
         cells = []
         cells.extend(non_code_map[None])
@@ -278,9 +337,7 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
             for idx, dep in enumerate(deps[tag]):
                 if dep in refs:
                     deps[tag][idx] = refs[dep]
-        print("deps:", deps)
         topo_deps = list(topological(deps))
-        print("topo_deps", topo_deps)
 
         while topo_deps:
             cid = topo_deps.pop()
