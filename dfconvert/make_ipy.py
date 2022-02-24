@@ -108,6 +108,16 @@ def transform_out_refs(csource,cast):
 
 
 def clean_cell(csource):
+    """
+    function: clean_cell
+    input params:
+        csource: cell content
+    output:
+        csource: reformatted cell content
+
+    returns the reformatted cell and None incase of any exception.
+    eg: a$12345 -> a_12345 and Out['12345'] -> Out_12345
+    """
     try:
         new_cell = csource
         #This part is used to replace a$cell_id in particular cell
@@ -136,24 +146,48 @@ def clean_cell(csource):
         return None
 
 
-def count_id_referenced_variables(csource, id_referenced_hmap):
+def count_id_referenced_variables(csource, id_referenced_map):
+    """
+    function: count_id_referenced_variables
+    input params:
+        csource: cell content
+        id_referenced_map: dict where variables are mapped to a set of referenced cell IDs
+    output:
+        id_referenced_map: updated dict where variables are mapped to a set of referenced cell IDs.
+
+    returns dict by adding cell_id to the collection of cell ids mapped to that variable
+    eg: if a_1234, a_2345, b_1234 exists in any cells in the notebook
+        {'a': {1234, 2345}, 'b': {1234}}
+    """
     try:
         pattern = IDENTIFIER_PATTERN + '_' + ID_PATTERN
         for match in re.finditer(pattern, csource):
             renamed_var = csource[match.start():match.end()]
             var_name, var_id = renamed_var[:-(DEFAULT_ID_LENGTH+3)], renamed_var[-(DEFAULT_ID_LENGTH+2):]
-            if var_name in id_referenced_hmap.keys():
-                id_referenced_hmap[var_name].add(var_id)
+            if var_name in id_referenced_map.keys():
+                id_referenced_map[var_name].add(var_id)
             else:
-                id_referenced_hmap[var_name] = {var_id}
-        return id_referenced_hmap
+                id_referenced_map[var_name] = {var_id}
+        return id_referenced_map
     except Exception as E:
         exc_type, exc_obj, exc_tb = sys.exc_info()
         print('Exception in method count_id_referenced_variables: %s at %s',str(E), str(exc_tb.tb_lineno))
         return None
 
 
-def clean_unused_id(code_cells, id_referenced_hmap):
+def clean_unused_id(code_cells, id_referenced_map):
+    """
+    function: clean_unused_id
+    input params:
+        code_cells: list of cells containing code
+        id_referenced_map: dict where variables are mapped to a set of referenced cell IDs
+    output:
+        code_cells: list of cells containing code
+
+    returns code cells after cleaning the variables
+    loop through the codecells and cleans cells where the set of id's mapped in the id_referenced_map dict is 1.
+    if variable was initialized just once, remove the _cellid at the end of it
+    """
     try:
         pattern = IDENTIFIER_PATTERN + '_' + ID_PATTERN
         for cell_key, cell_val in code_cells.items():
@@ -161,9 +195,9 @@ def clean_unused_id(code_cells, id_referenced_hmap):
             csource_copy = csource
             for match in re.finditer(pattern, csource):
                 identifier_var = csource[match.start(): match.end()][:-(DEFAULT_ID_LENGTH+3)]
-                if len(id_referenced_hmap.get(identifier_var, {})) == 1:
-                    csource_copy = re.sub("=[ \t]+"+identifier_var + '_' + list(id_referenced_hmap[identifier_var])[0] + "[ \t]+=", "=", csource_copy)
-                    csource_copy = re.sub(identifier_var + '_' + list(id_referenced_hmap[identifier_var])[0], identifier_var, csource_copy)
+                if len(id_referenced_map.get(identifier_var, {})) == 1:
+                    csource_copy = re.sub("=[ \t]+"+identifier_var + '_' + list(id_referenced_map[identifier_var])[0] + "[ \t]+=", "=", csource_copy)
+                    csource_copy = re.sub(identifier_var + '_' + list(id_referenced_map[identifier_var])[0], identifier_var, csource_copy)
                     csource_ast = ast.parse(csource_copy)
                     csource_ast_targets = csource_ast.body[-1].targets
                     if len(csource_ast_targets) >= 1:
@@ -199,8 +233,8 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
         deps = defaultdict(list)
         out_tags = defaultdict(list)
         refs = {}
-        #Maintain a hashmap for variables of the form var_id
-        id_referenced_hmap = {}
+        #Maintain a map for variables of the form var_id
+        id_referenced_map = {}
 
 
 
@@ -253,7 +287,8 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
                         exec_count = cell['metadata']['dfnotebook']['id'][:DEFAULT_ID_LENGTH+2]
                         cell.metadata.dfkernel_old_id = cell['execution_count']
                     last_code_id = exec_count
-                    #Remove cell id concatenated with identifiers and give it name of the format Out_
+
+                    #Reformat cell id concatenated with identifiers
                     csource = clean_cell(cell['source'])
                     if not isinstance(csource, str):
                         csource = "".join(csource)
@@ -289,7 +324,7 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
 
                     #Maintain a hashmap for var_id to clean the _id format incase it is not assigned 
                     #multiple times in the notebook.
-                    id_referenced_hmap = count_id_referenced_variables(csource, id_referenced_hmap)
+                    id_referenced_map = count_id_referenced_variables(csource, id_referenced_map)
 
 
                     for out_tag in valid_tags:
@@ -320,7 +355,7 @@ def export_dfpynb(d, in_fname=None, out_fname=None, md_above=True,full_transform
                         deps[exec_count] = []
                 else:
                     continue
-        code_cells = clean_unused_id(code_cells, id_referenced_hmap)
+        code_cells = clean_unused_id(code_cells, id_referenced_map)
 
         cells = []
         cells.extend(non_code_map[None])
