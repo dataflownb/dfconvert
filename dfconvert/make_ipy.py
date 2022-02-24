@@ -170,12 +170,13 @@ def clean_unused_id(code_cells, id_referenced_hmap):
                         pop_index = []
                         for target_i in range(1, len(csource_ast_targets)):
                             remove_multiple_assign = 0
-                            for elts_i, elts in enumerate(csource_ast_targets[target_i].elts):
-                                if csource_ast_targets[target_i].elts[elts_i].id != csource_ast.body[-1].targets[target_i-1].elts[elts_i].id:
-                                    remove_multiple_assign = 1
-                                    break
-                            if not remove_multiple_assign:
-                                pop_index.append(target_i-1)
+                            if 'elts' in dir(csource_ast_targets[target_i]):
+                                for elts_i, elts in enumerate(csource_ast_targets[target_i].elts):
+                                    if csource_ast_targets[target_i].elts[elts_i].id != csource_ast.body[-1].targets[target_i-1].elts[elts_i].id:
+                                        remove_multiple_assign = 1
+                                        break
+                                if not remove_multiple_assign:
+                                    pop_index.append(target_i-1)
                         for i in sorted(pop_index, reverse=True):
                             csource_ast_targets.pop(i)
                     csource_copy = DF_CELL_PREFIX + str(astor.to_source(csource_ast)).rstrip()
@@ -183,6 +184,7 @@ def clean_unused_id(code_cells, id_referenced_hmap):
             cell_val[0]['source'] = csource_copy
         return code_cells
     except Exception as E:
+        print("Exception for csource: ", csource)
         exc_type, exc_obj, exc_tb = sys.exc_info()
         print('Exception in method clean_unused_id: %s at %s',str(E), str(exc_tb.tb_lineno))
         return None
