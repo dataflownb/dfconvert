@@ -31,9 +31,10 @@ for more information.
     include_package_data=True,
     install_requires=[
         'notebook>=5.4',
-        'ipython>=6.3.0,<7.0.0',
+        'ipython>=7.17.0',
         'astor>=0.7',
-        'asttokens>1.1'
+        'asttokens>1.1',
+        'ast-comments>1.0'
     ],
     extras_require={
     'test': ['nbformat', 'nose-timer','nbconvert'],
