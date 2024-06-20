@@ -16,7 +16,7 @@ It relies on IPython core methods for some of the translation process so some ma
 
 
 ### Usage
-By installing the package, you will have a new option "Export as IPython Notebook" available in the toolbar interface of the Jupyter Notebook.
+By installing the package, you will have a new option "Export as ipykernel notebook" available in the toolbar interface of the Jupyter Notebook.
 
 Optionally the package can also be called by the use of
 ```
