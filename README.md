@@ -16,7 +16,14 @@ It relies on IPython core methods for some of the translation process so some ma
 
 
 ### Usage
-By installing the package, you will have a new option "Export as ipykernel notebook" available in the toolbar interface of the Jupyter Notebook.
+Upon installing the package, users will gain the capability to export their DataFlow notebooks as IPython kernel notebooks. This functionality can be accessed within Jupyter Lab by following these steps:
+
+1. Open your DataFlow notebook in Jupyter Lab.
+2. Click on the "File" menu located in the top navigation bar.
+3. Navigate to "Save and Export Notebook As".
+4. From the options presented, select "Ipykernel notebook".
+
+This process allows users to save their DataFlow notebooks in a format compatible with IPython kernel, facilitating further analysis or sharing with others who may prefer or require this format.
 
 Optionally the package can also be called by the use of
 ```
